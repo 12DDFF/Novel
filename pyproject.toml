@@ -1,0 +1,58 @@
+[project]
+name = "novel-to-video"
+version = "0.1.0"
+description = "Automated pipeline to convert Chinese web novels into AI-generated narrative videos"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "filelock>=3.12",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+scraper = [
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "fonttools>=4.50",
+    "brotli>=1.1",
+    "lxml>=5.0",
+]
+tts = [
+    "edge-tts>=6.1",
+    "pydub>=0.25",
+    "pyloudnorm>=0.1",
+]
+assembler = [
+    "moviepy>=2.0",
+    "pydub>=0.25",
+    "ffmpeg-python>=0.2",
+    "pysubs2>=1.7",
+]
+cli = [
+    "typer>=0.12",
+    "rich>=13.0",
+    "apscheduler>=3.10",
+]
+all = [
+    "novel-to-video[scraper,tts,assembler,cli,dev]",
+]
+
+[project.scripts]
+n2v = "src.cli.main:app"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
