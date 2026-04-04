@@ -98,6 +98,26 @@ class NarrationPipeline:
         for h in all_harvested[:10]:
             logger.info("    %s (freq=%d)", h.name, h.frequency)
 
+        # ── Step 1b: Seed Bible with top harvested characters ────────────
+        # The LLM sometimes skips the protagonist (assumes already in Bible).
+        # Pre-seed the top characters from the harvester to prevent this.
+        from src.narration.bible import CharacterBible
+        from src.narration.harvester import _split_name
+        for h in all_harvested[:10]:
+            if h.name not in bible.characters and h.frequency >= 5:
+                surname, given = _split_name(h.name)
+                bible.characters[h.name] = CharacterBible(
+                    name=h.name,
+                    aliases=h.aliases,
+                    surname=surname,
+                    role="",  # LLM will fill this in
+                    description="",
+                    first_appeared=min(h.chapter_appearances.keys()) if h.chapter_appearances else 1,
+                    last_appeared=max(h.chapter_appearances.keys()) if h.chapter_appearances else 1,
+                    tier="active",
+                )
+                logger.info("  Pre-seeded character: %s (freq=%d)", h.name, h.frequency)
+
         # ── Step 2: Build Bible in batches (5 chapters per LLM call) ────────
         batch_size = 5
         unprocessed = [

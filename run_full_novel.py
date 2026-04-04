@@ -132,6 +132,20 @@ def main():
             bible = StoryBible.load(bible_path)
             logger.info("Resuming Bible from chapter %d", bible.last_processed_chapter)
 
+        # Pre-seed Bible with top harvested characters (prevents protagonist being skipped)
+        from src.narration.bible import CharacterBible
+        from src.narration.harvester import _split_name
+        for h in all_harvested[:15]:
+            if h.name not in bible.characters and h.frequency >= 10:
+                surname, given = _split_name(h.name)
+                bible.characters[h.name] = CharacterBible(
+                    name=h.name, aliases=h.aliases, surname=surname,
+                    first_appeared=min(h.chapter_appearances.keys()) if h.chapter_appearances else 1,
+                    last_appeared=max(h.chapter_appearances.keys()) if h.chapter_appearances else 1,
+                    tier="active",
+                )
+                logger.info("  Pre-seeded: %s (freq=%d)", h.name, h.frequency)
+
         builder = BibleBuilder(llm, harvester)
         unprocessed = [(n, t) for n, t in chapters if n > bible.last_processed_chapter]
 

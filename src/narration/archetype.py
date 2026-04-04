@@ -475,9 +475,10 @@ class ArchetypeAssigner:
         result = dict(locked)  # start with locked assignments
 
         # Build profiles for unassigned characters
+        # Use ALL characters in Bible (not just active), prioritized by frequency
         freq_map = {h.name: h.frequency for h in harvested}
         unassigned = []
-        for name, char in bible.active_characters().items():
+        for name, char in bible.characters.items():
             if name in result:
                 continue  # already locked
             freq = freq_map.get(name, 0)
@@ -543,6 +544,13 @@ class ArchetypeAssigner:
                 char = bible.characters.get(name)
                 if char:
                     result[name] = _generate_descriptive_name(char)
+
+        # Safety: ensure protagonist (highest frequency) gets 小帅
+        if harvested and "小帅" not in used_archetypes:
+            protagonist = harvested[0]  # highest frequency
+            if protagonist.name not in result or result.get(protagonist.name) in ("路人", "那小子"):
+                result[protagonist.name] = "小帅"
+                logger.info("Force-assigned protagonist %s → 小帅", protagonist.name)
 
         return result
 

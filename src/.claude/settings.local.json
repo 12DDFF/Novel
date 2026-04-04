@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m pytest tests/test_sentence_splitter.py -v)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m pytest tests/test_visual_sheet.py tests/test_sentence_splitter.py -v)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m pytest tests/test_sentence_splitter.py tests/test_visual_sheet.py tests/test_scene_analyzer.py tests/test_prompt_generator.py tests/test_ref_selector.py -v)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m pytest tests/ -k \"not Integration\" -q)",
+      "Bash(python -c ':*)",
+      "Bash(rm -f data/projects/novel_8095/full_narration/story_bible.json data/projects/novel_8095/full_narration/narration_manifest.json data/projects/novel_8095/full_narration/archetype_map.json)",
+      "Bash(PYTHONIOENCODING=utf-8 python run_full_novel.py --novel-id 8095 --platform hetushu --skip-scrape --bible-batch-size 10 --chapters-per-episode 50 --target-minutes 8 --target-scenes 25)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(rm:*)",
+      "Bash(start:*)"
     ]
   }
 }

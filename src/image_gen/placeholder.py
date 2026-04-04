@@ -26,6 +26,7 @@ class PlaceholderGenerator(BaseImageGenerator):
         width: int = 1024,
         height: int = 1792,
         seed: int = -1,
+        reference_image: str | None = None,
     ) -> ImageResult:
         if seed == -1:
             seed = random.randint(0, 2**32)
