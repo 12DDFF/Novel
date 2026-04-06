@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 FLUX_DEV_MODEL = "black-forest-labs/flux-dev"
 FLUX_KONTEXT_DEV_MODEL = "black-forest-labs/flux-kontext-dev"
 FLUX_KONTEXT_PRO_MODEL = "black-forest-labs/flux-kontext-pro"
+FLUX_MULTI_IMAGE_MODEL = "flux-kontext-apps/multi-image-kontext-max"
 
 
 class ReplicateGenerator(BaseImageGenerator):
@@ -117,6 +118,63 @@ class ReplicateGenerator(BaseImageGenerator):
         )
         return self._generate_txt2img(prompt, output_path, 1024, 1024, random.randint(0, 2**32))
 
+    def generate_multi_character(
+        self,
+        prompt: str,
+        output_path: str,
+        reference_image_1: str,
+        reference_image_2: str,
+        seed: int = -1,
+    ) -> ImageResult:
+        """Generate a scene with TWO character references using multi-image Kontext."""
+        if seed == -1:
+            seed = random.randint(0, 2**32)
+
+        image_input_1 = self._prepare_image_input(reference_image_1)
+        image_input_2 = self._prepare_image_input(reference_image_2)
+
+        logger.info("Generating multi-character: %s...", prompt[:60])
+        try:
+            output = replicate.run(
+                FLUX_MULTI_IMAGE_MODEL,
+                input={
+                    "prompt": prompt,
+                    "input_image_1": image_input_1,
+                    "input_image_2": image_input_2,
+                    "seed": seed,
+                    "output_format": "png",
+                    "safety_tolerance": 2,
+                },
+            )
+        except Exception as e:
+            if "sensitive" in str(e).lower() or "E005" in str(e):
+                logger.warning("Content flagged in multi-char, retrying safer...")
+                safe_prompt = prompt + ", safe for work, fully clothed, appropriate content"
+                image_input_1 = self._prepare_image_input(reference_image_1)
+                image_input_2 = self._prepare_image_input(reference_image_2)
+                output = replicate.run(
+                    FLUX_MULTI_IMAGE_MODEL,
+                    input={
+                        "prompt": safe_prompt,
+                        "input_image_1": image_input_1,
+                        "input_image_2": image_input_2,
+                        "seed": seed + 1,
+                        "output_format": "png",
+                        "safety_tolerance": 2,
+                    },
+                )
+            else:
+                raise
+
+        url = self._extract_url(output)
+        self._download_image(url, output_path)
+
+        from PIL import Image
+        with Image.open(output_path) as img:
+            w, h = img.size
+
+        return ImageResult(image_path=output_path, prompt=prompt, seed=seed, width=w, height=h)
+
     def generate_character_turnaround(
         self,
         reference_image: str,
@@ -203,12 +261,12 @@ class ReplicateGenerator(BaseImageGenerator):
                     "input_image": image_input,
                     "seed": seed,
                     "output_format": "png",
+                    "safety_tolerance": 2,
                 },
             )
         except Exception as e:
             if "sensitive" in str(e).lower() or "E005" in str(e):
-                # Retry with safer prompt
-                logger.warning(f"Content flagged, retrying with safer prompt...")
+                logger.warning("Content flagged, retrying with safer prompt...")
                 safe_prompt = prompt + ", safe for work, fully clothed, appropriate content"
                 image_input = self._prepare_image_input(reference_image)
                 output = replicate.run(
@@ -218,6 +276,7 @@ class ReplicateGenerator(BaseImageGenerator):
                         "input_image": image_input,
                         "seed": seed + 1,
                         "output_format": "png",
+                        "safety_tolerance": 2,
                     },
                 )
             else:

@@ -13,7 +13,7 @@ from pathlib import Path
 from src.core.llm_client import LLMClient
 from src.image_gen.base import BaseImageGenerator, ImageResult
 from src.image_pipeline.prompt_generator import ImagePromptGenerator
-from src.image_pipeline.ref_selector import select_reference
+from src.image_pipeline.ref_selector import select_reference, select_references_multi
 from src.image_pipeline.scene_analyzer import SceneAnalyzer, SceneAnalysis
 from src.image_pipeline.sentence_splitter import split_narration
 from src.image_pipeline.visual_sheet import VisualSheet
@@ -105,18 +105,27 @@ class ImagePipelineOrchestrator:
         # Step 4: Select references + generate images
         logger.info("Episode %d: Generating %d images...", episode_num, len(result.analyses))
         for i, (analysis, prompt) in enumerate(zip(result.analyses, result.prompts)):
-            # Select reference
-            ref = select_reference(analysis, self.visual_sheet)
+            # Select reference(s)
+            refs = select_references_multi(analysis, self.visual_sheet, max_refs=2)
+            ref = refs[0] if refs else None
             result.references.append(ref)
 
-            # Generate image
+            # Generate image — use multi-character if 2 refs available
             img_path = str(episode_dir / f"img_{i:03d}.png")
             try:
-                img_result = self.image_gen.generate(
-                    prompt=prompt,
-                    output_path=img_path,
-                    reference_image=ref,
-                )
+                if len(refs) >= 2 and hasattr(self.image_gen, 'generate_multi_character'):
+                    img_result = self.image_gen.generate_multi_character(
+                        prompt=prompt,
+                        output_path=img_path,
+                        reference_image_1=refs[0],
+                        reference_image_2=refs[1],
+                    )
+                else:
+                    img_result = self.image_gen.generate(
+                        prompt=prompt,
+                        output_path=img_path,
+                        reference_image=ref,
+                    )
                 result.images.append(img_result)
             except Exception as e:
                 logger.warning("Image generation failed for sentence %d: %s", i, e)
