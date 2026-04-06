@@ -90,11 +90,15 @@ class ImagePipelineOrchestrator:
         )
         logger.info("  %d analyses", len(result.analyses))
 
+        # Step 2b: Guardrail — ensure all detected characters have reference images
+        self._ensure_references(result.analyses)
+
         # Step 3: Generate image prompts
         logger.info("Episode %d: Generating image prompts...", episode_num)
         result.prompts = self.prompt_gen.generate_batch(
             result.analyses,
             self.visual_sheet,
+            sentences=result.sentences,
         )
         logger.info("  %d prompts", len(result.prompts))
 
@@ -126,6 +130,68 @@ class ImagePipelineOrchestrator:
 
         logger.info("Episode %d: Done — %d images generated", episode_num, len(result.images))
         return result
+
+    def _ensure_references(self, analyses: list[SceneAnalysis]) -> None:
+        """Guardrail: generate master reference images for any character missing one.
+
+        Scans all analyses, finds characters/creatures without references,
+        and generates them via Flux Dev before proceeding to scene generation.
+        """
+        # Collect all unique entities across all scenes
+        missing: dict[str, str] = {}  # name → visual_description
+        for analysis in analyses:
+            for name in analysis.characters_present + analysis.creatures_present:
+                if name in missing:
+                    continue
+                ref = self.visual_sheet.get_reference(name)
+                if ref:
+                    continue
+                entity = self.visual_sheet.get_entity(name)
+                if entity and entity.visual_description_en:
+                    missing[name] = entity.visual_description_en
+
+        if not missing:
+            return
+
+        logger.info("Generating %d missing reference images...", len(missing))
+        for name, visual_desc in missing.items():
+            entity = self.visual_sheet.get_entity(name)
+            if not entity:
+                continue
+
+            # Determine save path
+            if entity.entity_type == "creature":
+                ref_dir = Path(self.visual_sheet.novel_id) if self.visual_sheet.novel_id else Path(".")
+                # Use the visual sheet's existing path pattern or create new
+                ref_path = entity.reference_image_path or str(
+                    Path("shared_creatures") / f"{name}.png"
+                )
+            else:
+                ref_path = entity.reference_image_path or str(
+                    Path("shared_characters") / f"{name}.png"
+                )
+
+            # Make path absolute if needed
+            if not Path(ref_path).is_absolute():
+                # Try to find a reasonable base dir from existing refs
+                for _, e in self.visual_sheet.entities.items():
+                    if e.reference_image_path and Path(e.reference_image_path).exists():
+                        base = Path(e.reference_image_path).parent.parent
+                        if entity.entity_type == "creature":
+                            ref_path = str(base / "shared_creatures" / f"{name}.png")
+                        else:
+                            ref_path = str(base / "shared_characters" / f"{name}.png")
+                        break
+
+            Path(ref_path).parent.mkdir(parents=True, exist_ok=True)
+
+            logger.info("  Generating reference: %s → %s", name, Path(ref_path).name)
+            try:
+                self.image_gen.generate_character_sheet(visual_desc, ref_path)
+                entity.reference_image_path = ref_path
+                logger.info("  Done: %s", name)
+            except Exception as e:
+                logger.warning("  Failed to generate reference for %s: %s", name, e)
 
     def process_all_episodes(
         self,

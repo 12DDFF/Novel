@@ -26,13 +26,18 @@ class ImagePromptGenerator:
         self,
         analyses: list[SceneAnalysis],
         visual_sheet: VisualSheet,
+        sentences: list[str] | None = None,
     ) -> list[str]:
         """
         Generate image prompts for a batch of analyzed scenes.
 
+        Each sentence gets the FULL surrounding scene context so the LLM
+        can write specific, concrete prompts.
+
         Args:
             analyses: Scene analyses from SceneAnalyzer.
             visual_sheet: Visual descriptions for characters/creatures.
+            sentences: Full list of sentences for context window.
 
         Returns:
             List of English image prompts (one per analysis).
@@ -40,72 +45,102 @@ class ImagePromptGenerator:
         if not analyses:
             return []
 
-        # Build character visual descriptions
-        all_chars = set()
-        for a in analyses:
-            all_chars.update(a.characters_present)
-            all_chars.update(a.creatures_present)
+        sentences = sentences or [a.sentence for a in analyses]
+        prompts = []
+        prev_background = ""
 
-        char_visuals = []
-        for name in all_chars:
-            entity = visual_sheet.get_entity(name)
-            if entity:
-                has_ref = "YES" if visual_sheet.get_reference(name) else "NO"
-                char_visuals.append(
-                    f"- {name}: {entity.visual_description_en} [has reference image: {has_ref}]"
-                )
+        for i, analysis in enumerate(analyses):
+            # Build scene context: 3 sentences before + current + 3 after
+            idx = analysis.sentence_index
+            context_start = max(0, idx - 3)
+            context_end = min(len(sentences), idx + 4)
+            scene_text = "\n".join(sentences[context_start:context_end])
 
-        # Build scene descriptions
-        import json
-        scenes_data = []
-        for a in analyses:
-            scenes_data.append({
-                "sentence_index": a.sentence_index,
-                "sentence": a.sentence,
-                "characters": a.characters_present,
-                "location": a.location,
-                "location_changed": a.location_changed,
-                "mood": a.mood,
-                "camera": a.camera_suggestion,
-                "creatures": a.creatures_present,
-                "key_action": a.key_action,
-                "background": a.background_description,
-            })
+            # Build character visuals for THIS scene
+            char_visuals = []
+            for name in analysis.characters_present + analysis.creatures_present:
+                entity = visual_sheet.get_entity(name)
+                if entity:
+                    has_ref = "[REF]" if visual_sheet.get_reference(name) else "[NO REF]"
+                    char_visuals.append(
+                        f"- {name} {has_ref}: {entity.visual_description_en}"
+                    )
 
-        prompt = IMAGE_PROMPT_TEMPLATE.format(
-            character_visuals="\n".join(char_visuals) if char_visuals else "(no characters)",
-            scenes=json.dumps(scenes_data, ensure_ascii=False, indent=2),
-        )
-
-        try:
-            raw = self.llm.chat_json(
-                prompt=prompt,
-                system=IMAGE_PROMPT_SYSTEM,
-                temperature=0.3,
+            prompt_input = IMAGE_PROMPT_TEMPLATE.format(
+                scene_text=scene_text,
+                current_sentence=analysis.sentence,
+                character_visuals="\n".join(char_visuals) if char_visuals else "(no characters visible)",
+                location=analysis.location or "unknown",
+                mood=analysis.mood,
+                previous_background=prev_background or "(first scene)",
+                location_changed=analysis.location_changed,
             )
 
-            prompts = [""] * len(analyses)
-            items = raw if isinstance(raw, list) else raw.get("prompts", raw.get("scenes", []))
-            for item in items:
-                if isinstance(item, dict):
-                    idx = item.get("sentence_index", 0)
-                    prompt_text = item.get("image_prompt", "")
-                    # Map to position in analyses list
-                    for i, a in enumerate(analyses):
-                        if a.sentence_index == idx:
-                            prompts[i] = prompt_text
-                            break
+            try:
+                raw = self.llm.chat_json(
+                    prompt=prompt_input,
+                    system=IMAGE_PROMPT_SYSTEM,
+                    temperature=0.4,
+                )
+                if isinstance(raw, dict):
+                    prompt_text = raw.get("image_prompt", "")
+                elif isinstance(raw, str):
+                    prompt_text = raw
+                else:
+                    prompt_text = ""
 
-            # Fill any gaps with fallback prompts
-            for i, p in enumerate(prompts):
-                if not p:
-                    prompts[i] = self._fallback_prompt(analyses[i])
+                if prompt_text:
+                    prompt_text = self._sanitize_prompt(prompt_text)
+                    prompts.append(prompt_text)
+                    # Track background for continuity
+                    if analysis.location:
+                        prev_background = analysis.background_description or analysis.location
+                else:
+                    prompts.append(self._fallback_prompt(analysis))
 
-            return prompts
+            except Exception as e:
+                logger.warning("Prompt gen failed for sentence %d: %s", idx, e)
+                prompts.append(self._fallback_prompt(analysis))
 
-        except Exception as e:
-            logger.warning("Prompt generation failed: %s — using fallbacks", e)
-            return [self._fallback_prompt(a) for a in analyses]
+            if (i + 1) % 10 == 0:
+                logger.info("  Generated %d/%d prompts", i + 1, len(analyses))
+
+        return prompts
+
+    @staticmethod
+    def _sanitize_prompt(prompt: str) -> str:
+        """Remove violent/gory content that triggers Flux safety filters."""
+        import re
+        replacements = {
+            # Gore/blood
+            r"blood\w*": "red energy",
+            r"bleed\w*": "injured",
+            r"gore\w*": "damage",
+            r"gory": "intense",
+            r"bloody": "intense",
+            r"splatter\w*": "burst",
+            # Killing/death
+            r"kill\w*": "defeat",
+            r"murder\w*": "confront",
+            r"decapitat\w*": "strike down",
+            r"slash\w* ?(throat|neck)": "strike at opponent",
+            r"stab\w*": "strike",
+            r"slash\w*": "swing at",
+            r"sever\w*": "cut through",
+            r"dismember\w*": "overpower",
+            r"corpse\w*": "fallen figure",
+            r"dead bod\w*": "fallen figure",
+            # Zombie gore
+            r"rotting skin": "pale grey skin",
+            r"rotting": "decayed",
+            r"exposed (teeth|bone|flesh)": "menacing appearance",
+            # General violence
+            r"throat": "chest",
+            r"brain\w* (splatter|burst|out)": "dramatic impact",
+        }
+        for pattern, replacement in replacements.items():
+            prompt = re.sub(pattern, replacement, prompt, flags=re.IGNORECASE)
+        return prompt
 
     @staticmethod
     def _fallback_prompt(analysis: SceneAnalysis) -> str:

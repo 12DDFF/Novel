@@ -48,46 +48,57 @@ Return JSON array:
   }}
 ]"""
 
-IMAGE_PROMPT_SYSTEM = """You are a professional AI image prompt engineer.
-You convert scene descriptions into precise English prompts for Flux image generation.
-Your prompts produce consistent, high-quality anime illustrations.
+IMAGE_PROMPT_SYSTEM = """You are a top-tier AI image prompt engineer specializing in anime-style illustration for Flux image generation.
+
+Your job: read a story scene and create a SINGLE image prompt that captures the most visually compelling moment.
+
+You think like a cinematographer — you choose the camera angle, the lighting, the composition, and you describe EXACTLY what the viewer sees in the frame. Not vague feelings. Concrete visuals.
+
 Always respond in valid JSON format."""
 
-IMAGE_PROMPT_TEMPLATE = """Convert these scene analyses into English image generation prompts.
+IMAGE_PROMPT_TEMPLATE = """I need you to generate image prompts for my image generator Flux.
 
-VISUAL CHARACTER DESCRIPTIONS:
+Here is the FULL SCENE from the story:
+---
+{scene_text}
+---
+
+Here is the SPECIFIC LINE I want to visualize:
+"{current_sentence}"
+
+CHARACTERS IN THIS SCENE (use these visual descriptions):
 {character_visuals}
 
-SCENES TO CONVERT:
-{scenes}
+SCENE CONTEXT:
+- Location: {location}
+- Mood: {mood}
+- Previous scene background: {previous_background}
+- Location changed from previous: {location_changed}
 
-LIGHTING GUIDE BY MOOD:
-- tense: dramatic side lighting with sharp shadows, cool blue tones
-- action: bright directional light with rim lighting, high contrast
-- joyful: bright warm sunlight, golden hour, vibrant colors
-- melancholy: overcast diffused light, muted cool tones, rain or fog
-- romantic: soft warm backlight with rim glow, bokeh, gentle atmosphere
-- dramatic: strong volumetric light with god rays, storm clouds
-- mysterious: dim ambient light, single light source, fog and silhouettes
-- peaceful: soft morning light, warm pastels, gentle breeze
-- horror: harsh underlighting, deep shadows, desaturated cold blue
-- humorous: bright even lighting, warm tones, exaggerated expressions
+Now generate ONE image prompt following these rules:
 
-RULES:
-1. Start with "anime illustration"
-2. Include camera angle from scene analysis
-3. Describe character(s) using their VISUAL DESCRIPTION (not story info)
-4. If character has a reference image, start character description with "the same character"
-5. Include setting/background details
-6. Match lighting to mood using the guide above
-7. 30-75 words maximum per prompt
-8. End with "natural hand proportions, correct human anatomy"
-9. If location hasn't changed from previous scene, keep background description consistent
+FORMAT: "anime illustration, [camera angle], [what the viewer sees in the frame]"
 
-Return JSON array:
-[
-  {{
-    "sentence_index": 0,
-    "image_prompt": "anime illustration, medium shot, the same character..."
-  }}
-]"""
+WHAT MAKES A GOOD PROMPT:
+- Describe the SCENE like a movie frame — background FIRST, then characters, then action
+- Be SPECIFIC: "girl gripping doorframe with white knuckles, tears streaming down face" NOT "girl is scared"
+- Include the ENVIRONMENT: walls, floor, lighting sources, objects, weather
+- Describe CHARACTER POSES and EXPRESSIONS concretely
+- For characters with [REF], write "the same character" then describe what they're DOING (pose, expression, action)
+- For characters WITHOUT [REF], include their full visual description
+- Include lighting direction and color: "cold blue moonlight from the left", "warm overhead fluorescent"
+
+WHAT TO AVOID:
+- NO gore, blood, death, killing — use "confronting", "clashing", "overpowering" instead
+- NO vague descriptions like "dramatic moment" or "intense scene"
+- NO emotions without physical description — show don't tell
+- This is NOT a character portrait — there MUST be a background/environment
+
+LENGTH: 40-80 words
+
+End with: "natural hand proportions, correct human anatomy"
+
+Return JSON:
+{{
+  "image_prompt": "anime illustration, ..."
+}}"""
