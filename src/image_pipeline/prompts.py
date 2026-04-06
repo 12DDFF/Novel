@@ -84,9 +84,15 @@ WHAT MAKES A GOOD PROMPT:
 - Be SPECIFIC: "girl gripping doorframe with white knuckles, tears streaming down face" NOT "girl is scared"
 - Include the ENVIRONMENT: walls, floor, lighting sources, objects, weather
 - Describe CHARACTER POSES and EXPRESSIONS concretely
-- For characters with [REF], write "the same character" then describe what they're DOING (pose, expression, action)
-- For characters WITHOUT [REF], include their full visual description
 - Include lighting direction and color: "cold blue moonlight from the left", "warm overhead fluorescent"
+
+HOW TO REFERENCE CHARACTERS:
+- For characters with [REF]: describe them by their KEY VISUAL FEATURES (hair, clothing) so Flux can match them to the reference image
+  Example: "the young man with short messy black hair in torn school uniform" (matches ref image 1)
+  Example: "the girl with long straight black hair and pink hairpin" (matches ref image 2)
+- For characters WITHOUT [REF]: include their full visual description
+- NEVER just say "the same character" — always include identifying visual details
+- When 2 characters are in the scene, describe BOTH with their distinguishing features
 
 WHAT TO AVOID:
 - NO gore, blood, death, killing — use "confronting", "clashing", "overpowering" instead
