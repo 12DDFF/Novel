@@ -56,9 +56,13 @@ class ImagePromptGenerator:
             context_end = min(len(sentences), idx + 4)
             scene_text = "\n".join(sentences[context_start:context_end])
 
-            # Build character visuals for THIS scene
+            # Build character visuals for THIS scene (prefer archetype names)
             char_visuals = []
-            for name in analysis.characters_present + analysis.creatures_present:
+            seen = set()
+            for name in analysis.characters_archetype + analysis.characters_present + analysis.creatures_present:
+                if name in seen:
+                    continue
+                seen.add(name)
                 entity = visual_sheet.get_entity(name)
                 if entity:
                     has_ref = "[REF]" if visual_sheet.get_reference(name) else "[NO REF]"

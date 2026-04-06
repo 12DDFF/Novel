@@ -137,10 +137,10 @@ class ImagePipelineOrchestrator:
         Scans all analyses, finds characters/creatures without references,
         and generates them via Flux Dev before proceeding to scene generation.
         """
-        # Collect all unique entities across all scenes
+        # Collect all unique entities across all scenes (check archetype names too)
         missing: dict[str, str] = {}  # name → visual_description
         for analysis in analyses:
-            for name in analysis.characters_present + analysis.creatures_present:
+            for name in analysis.characters_archetype + analysis.characters_present + analysis.creatures_present:
                 if name in missing:
                     continue
                 ref = self.visual_sheet.get_reference(name)

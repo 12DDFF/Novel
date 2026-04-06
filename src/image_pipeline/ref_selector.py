@@ -36,7 +36,13 @@ def select_reference(
     Returns:
         Path to reference image, or None for text-to-image.
     """
-    # Try characters first (prioritize protagonist/main characters)
+    # Try archetype names first (小帅, 白莲花 — what the narration uses)
+    for name in analysis.characters_archetype:
+        ref = visual_sheet.get_reference(name)
+        if ref:
+            return ref
+
+    # Fall back to original names
     for name in analysis.characters_present:
         ref = visual_sheet.get_reference(name)
         if ref:

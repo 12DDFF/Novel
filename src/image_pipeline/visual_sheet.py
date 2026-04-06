@@ -162,24 +162,31 @@ class VisualSheetBuilder:
         logger.info("Generating visual descriptions for %d characters...", len(bible.characters))
         descriptions = self._generate_descriptions(bible)
 
-        # Step 2: Build VisualSheet
+        # Step 2: Build VisualSheet — keyed by ARCHETYPE name (what narration uses)
         sheet = VisualSheet(novel_id=bible.novel_id)
 
-        # Add characters
+        # Add characters — key is the archetype nickname (小帅, not 顾杀)
         for char_desc in descriptions.get("characters", []):
-            name = char_desc.get("name", "")
-            if not name:
+            original_name = char_desc.get("name", "")
+            if not original_name:
                 continue
-            visual_en = char_desc.get("visual_description_en", "")
-            ref_path = str(char_dir / f"{name}.png")
+            archetype = archetype_map.get(original_name, "")
+            if not archetype or archetype in ("路人", "那小子", "那姑娘"):
+                continue  # skip generic/minor characters
 
-            sheet.entities[name] = VisualEntity(
-                name=name,
-                archetype=archetype_map.get(name, ""),
+            visual_en = char_desc.get("visual_description_en", "")
+            # Store ref image by archetype name
+            ref_path = str(char_dir / f"{archetype}.png")
+
+            sheet.entities[archetype] = VisualEntity(
+                name=archetype,
+                archetype=archetype,
                 entity_type="character",
                 visual_description_en=visual_en,
                 reference_image_path=ref_path if Path(ref_path).exists() else None,
             )
+            # Also store by original name for backward compat
+            sheet.entities[original_name] = sheet.entities[archetype]
 
         # Add creatures
         for creature_desc in descriptions.get("creatures", []):
