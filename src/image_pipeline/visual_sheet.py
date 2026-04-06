@@ -38,20 +38,26 @@ STORY SETTING/TIME PERIOD:
 CHARACTERS (from story):
 {characters}
 
+ARCHETYPE VISUAL RULES (these archetype names carry specific meaning — FOLLOW THEM):
+{archetype_rules}
+
 CREATURES/ENTITIES (from world building):
 {creatures}
 
-For each entity, provide a concise English visual description (2-3 sentences) covering:
-- Physical appearance: age, build, hair color/style, eye color, skin tone
-- Clothing: MUST match the time period/setting above. Modern story = modern clothes. Ancient/cultivation = traditional robes.
-- Distinguishing features: scars, accessories (NO weapons or held items)
+For each entity, provide a SPECIFIC English visual description covering:
+- EXACT age (e.g. "17 years old", "45 years old")
+- EXACT hair: color, length, style (e.g. "shoulder-length dyed blonde hair" not just "black hair")
+- EXACT build: (slim/average/athletic/muscular/stocky)
+- EXACT clothing: specific modern/period items (e.g. "white school uniform shirt, black pants, sneakers")
+- Eye color and expression
+- ONE distinguishing feature that makes them unique
 
 CRITICAL RULES:
-- Do NOT describe characters holding weapons, tools, or any items — hands must be EMPTY
-- Do NOT make characters look like existing anime/manga characters (no Goku hair, no Naruto whiskers, etc.)
-- Keep designs ORIGINAL and realistic within the anime style
-- All clothing must be consistent with the time period
-- For creatures: size, color, body type, notable features
+- GENDER MUST MATCH: if marked [FEMALE], description MUST say "woman/girl/female". If [MALE], MUST say "man/boy/male".
+- Hands EMPTY — NO weapons, tools, or held objects
+- NOT resembling any existing anime/manga character
+- ALL clothing must match the time period: "{time_period}"
+- Each character must look visually DISTINCT from others (different hair color/style, different body type)
 
 Return as JSON:
 {{
@@ -257,9 +263,40 @@ class VisualSheetBuilder:
             return "sci-fi/futuristic"
         return "modern/contemporary"
 
+    # Archetype names carry visual meaning — enforce them
+    ARCHETYPE_VISUAL_HINTS = {
+        "小帅": "young handsome male, protagonist look, confident expression",
+        "小美": "beautiful young female, elegant, love interest look",
+        "黄毛": "MUST have dyed yellow/blonde hair (黄毛 literally means yellow hair), thuggish look, delinquent",
+        "白莲花": "innocent-looking female, seemingly pure but scheming, soft features",
+        "绿茶": "attractive female, fake-nice expression, fashionable",
+        "渣男": "handsome but sleazy male, arrogant smirk",
+        "渣女": "attractive female, flirtatious eyes, manipulative look",
+        "老爷子": "elderly male, dignified, silver/grey hair",
+        "大佬": "imposing male authority figure, powerful presence",
+        "少爷": "wealthy young male, refined features, expensive clothes",
+        "千金": "wealthy young FEMALE (千金=rich girl), delicate features, elegant",
+        "校花": "beautiful FEMALE student, campus beauty",
+        "校霸": "tough male, scar or intimidating features, street fighter look",
+        "兄弟": "average-build young male, loyal look, casual",
+        "小弟": "younger male, follower type, energetic",
+        "小妹": "young FEMALE, petite, cute",
+        "闺蜜": "young FEMALE, friendly, stylish",
+        "岳父": "middle-aged male, stern but caring, formal",
+        "亲妈": "middle-aged FEMALE, warm maternal look, practical clothes",
+        "败家爹": "middle-aged male, tired/weak look, rumpled clothes",
+        "恶婆婆": "older FEMALE, sharp disapproving eyes, stern face",
+        "心机男": "handsome male, calculating cold eyes, well-dressed",
+        "公主": "young FEMALE, regal bearing, refined features",
+        "老大": "middle-aged male, authoritative, commanding presence",
+        "院长大人": "elderly male, scholarly, wise eyes",
+        "队长": "male, military bearing, disciplined look, uniform",
+    }
+
     def _generate_descriptions(self, bible: StoryBible, time_period: str = "modern") -> dict:
         """LLM call to generate English visual descriptions."""
-        # Build character info
+        # Build character info with gender and archetype hints
+        from src.narration.archetype import ARCHETYPE_REGISTRY
         char_lines = []
         for name, char in bible.characters.items():
             if char.tier == "retired":
@@ -279,9 +316,19 @@ class VisualSheetBuilder:
         if not creature_lines:
             creature_lines = ["- (no creatures mentioned)"]
 
+        # Build archetype visual rules for characters that have archetypes
+        archetype_rules_lines = []
+        from src.narration.archetype import ARCHETYPE_REGISTRY
+        for arch_name, defn in ARCHETYPE_REGISTRY.items():
+            hint = self.ARCHETYPE_VISUAL_HINTS.get(arch_name, "")
+            gender_tag = f"[{defn.gender.upper()}]" if defn.gender else ""
+            if hint:
+                archetype_rules_lines.append(f"- {arch_name} {gender_tag}: {hint}")
+
         prompt = VISUAL_DESCRIPTION_PROMPT.format(
             time_period=time_period,
             characters="\n".join(char_lines) if char_lines else "(no characters)",
+            archetype_rules="\n".join(archetype_rules_lines),
             creatures="\n".join(creature_lines),
         )
 
