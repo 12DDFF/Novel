@@ -32,6 +32,9 @@ Always respond in valid JSON format."""
 
 VISUAL_DESCRIPTION_PROMPT = """Convert these characters and creatures into English visual descriptions for AI image generation.
 
+STORY SETTING/TIME PERIOD:
+{time_period}
+
 CHARACTERS (from story):
 {characters}
 
@@ -40,8 +43,14 @@ CREATURES/ENTITIES (from world building):
 
 For each entity, provide a concise English visual description (2-3 sentences) covering:
 - Physical appearance: age, build, hair color/style, eye color, skin tone
-- Clothing: what they typically wear
-- Distinguishing features: scars, weapons, accessories
+- Clothing: MUST match the time period/setting above. Modern story = modern clothes. Ancient/cultivation = traditional robes.
+- Distinguishing features: scars, accessories (NO weapons or held items)
+
+CRITICAL RULES:
+- Do NOT describe characters holding weapons, tools, or any items — hands must be EMPTY
+- Do NOT make characters look like existing anime/manga characters (no Goku hair, no Naruto whiskers, etc.)
+- Keep designs ORIGINAL and realistic within the anime style
+- All clothing must be consistent with the time period
 - For creatures: size, color, body type, notable features
 
 Return as JSON:
@@ -70,6 +79,7 @@ class VisualEntity(BaseModel):
     name: str
     archetype: str = ""
     entity_type: str = "character"  # character, creature, object
+    gender: str = ""  # male, female, or empty
     visual_description_en: str = ""
     reference_image_path: str | None = None
 
@@ -78,6 +88,7 @@ class VisualSheet(BaseModel):
     """Registry of all visual entities for a novel."""
 
     novel_id: str = ""
+    time_period: str = "modern"  # modern, ancient, cultivation, sci-fi, mixed
     entities: dict[str, VisualEntity] = Field(default_factory=dict)
 
     def get_entity(self, name: str) -> VisualEntity | None:
@@ -158,12 +169,23 @@ class VisualSheetBuilder:
         char_dir.mkdir(parents=True, exist_ok=True)
         creature_dir.mkdir(parents=True, exist_ok=True)
 
-        # Step 1: Generate visual descriptions via LLM
-        logger.info("Generating visual descriptions for %d characters...", len(bible.characters))
-        descriptions = self._generate_descriptions(bible)
+        # Step 1: Detect time period from world facts
+        time_period = self._detect_time_period(bible)
+        logger.info("Detected time period: %s", time_period)
 
-        # Step 2: Build VisualSheet — keyed by ARCHETYPE name (what narration uses)
-        sheet = VisualSheet(novel_id=bible.novel_id)
+        # Step 2: Generate visual descriptions via LLM
+        logger.info("Generating visual descriptions for %d characters...", len(bible.characters))
+        descriptions = self._generate_descriptions(bible, time_period)
+
+        # Step 3: Build VisualSheet — keyed by ARCHETYPE name (what narration uses)
+        sheet = VisualSheet(novel_id=bible.novel_id, time_period=time_period)
+
+        # Get gender info from archetype definitions
+        from src.narration.archetype import ARCHETYPE_REGISTRY
+        archetype_genders = {
+            name: defn.gender or ""
+            for name, defn in ARCHETYPE_REGISTRY.items()
+        }
 
         # Add characters — key is the archetype nickname (小帅, not 顾杀)
         for char_desc in descriptions.get("characters", []):
@@ -172,20 +194,20 @@ class VisualSheetBuilder:
                 continue
             archetype = archetype_map.get(original_name, "")
             if not archetype or archetype in ("路人", "那小子", "那姑娘"):
-                continue  # skip generic/minor characters
+                continue
 
             visual_en = char_desc.get("visual_description_en", "")
-            # Store ref image by archetype name
+            gender = archetype_genders.get(archetype, "")
             ref_path = str(char_dir / f"{archetype}.png")
 
             sheet.entities[archetype] = VisualEntity(
                 name=archetype,
                 archetype=archetype,
                 entity_type="character",
+                gender=gender,
                 visual_description_en=visual_en,
                 reference_image_path=ref_path if Path(ref_path).exists() else None,
             )
-            # Also store by original name for backward compat
             sheet.entities[original_name] = sheet.entities[archetype]
 
         # Add creatures
@@ -210,7 +232,32 @@ class VisualSheetBuilder:
 
         return sheet
 
-    def _generate_descriptions(self, bible: StoryBible) -> dict:
+    @staticmethod
+    def _detect_time_period(bible: StoryBible) -> str:
+        """Detect the story's time period from world facts and character descriptions."""
+        all_text = " ".join(f.fact for f in bible.world)
+        all_text += " ".join(c.description for c in bible.characters.values())
+
+        modern_signals = ["手机", "电话", "汽车", "城市", "学校", "高中", "大学",
+                          "网络", "电脑", "壁垒", "军队", "枪", "公司", "协会"]
+        ancient_signals = ["修仙", "仙人", "道士", "宗门", "掌门", "长老", "灵气",
+                           "丹药", "法器", "飞剑", "洞天", "结丹", "元婴", "渡劫",
+                           "皇帝", "朝廷", "大臣", "太子", "皇宫"]
+        scifi_signals = ["星球", "宇宙", "飞船", "空间站", "异星", "银河"]
+
+        modern_count = sum(1 for s in modern_signals if s in all_text)
+        ancient_count = sum(1 for s in ancient_signals if s in all_text)
+        scifi_count = sum(1 for s in scifi_signals if s in all_text)
+
+        if ancient_count > modern_count and ancient_count > scifi_count:
+            if modern_count > 3:
+                return "mixed (starts modern, evolves into cultivation/xianxia)"
+            return "ancient Chinese cultivation/xianxia"
+        if scifi_count > modern_count:
+            return "sci-fi/futuristic"
+        return "modern/contemporary"
+
+    def _generate_descriptions(self, bible: StoryBible, time_period: str = "modern") -> dict:
         """LLM call to generate English visual descriptions."""
         # Build character info
         char_lines = []
@@ -233,6 +280,7 @@ class VisualSheetBuilder:
             creature_lines = ["- (no creatures mentioned)"]
 
         prompt = VISUAL_DESCRIPTION_PROMPT.format(
+            time_period=time_period,
             characters="\n".join(char_lines) if char_lines else "(no characters)",
             creatures="\n".join(creature_lines),
         )

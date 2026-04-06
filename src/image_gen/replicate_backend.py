@@ -108,8 +108,12 @@ class ReplicateGenerator(BaseImageGenerator):
         prompt = (
             f"anime illustration, front-facing character portrait with three-quarter body framing, "
             f"{character_description}, "
+            f"arms relaxed at sides with hands visible and empty, "
+            f"NOT holding any weapons or objects or tools, "
             f"neutral solid color background, soft even studio lighting from the front, "
-            f"detailed face with sharp focus on facial features, clean linework, professional character design"
+            f"detailed face with sharp focus on facial features, clean linework, "
+            f"original character design, NOT resembling any existing anime or manga character, "
+            f"natural hand proportions, correct human anatomy"
         )
         return self._generate_txt2img(prompt, output_path, 1024, 1024, random.randint(0, 2**32))
 
